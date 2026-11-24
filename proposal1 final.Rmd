@@ -1,0 +1,327 @@
+---
+title: "STA302H1 Fall 2025 Final Project
+Part 1: Research Proposal"
+author: "Lidya Yared, Hannah Zihan Wang, Anisa Hosseinpour Khoshghalb"
+date: "2025-10-25"
+output: pdf_document
+keep_md: true
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+```
+
+
+<div style="text-align: center;">
+
+## **Research Question: Which demographic and time-determined factors predict longer case processing times for Black civilian complaints against NYPD officers?**
+
+</div>
+
+
+\newpage
+
+
+
+## 1 Introduction
+
+### 1.1 Proposed Research Question and Suitability of LR
+
+|   Our proposed research question is “Which demographic and time-determined factors predict longer case processing times for Black civilian complaints against NYPD officers?”. A linear regression model is appropriate for addressing our research question for several reasons. First, our outcome variable(case processing time) is continuous, making it suitable for linear modeling. Second, our research question seeks to understand the combined effect of multiple predictors simultaneously, which cannot be properly addressed through simpler statistical techniques. Third, linear regression allows us to estimate the independent effect of each predictor while controlling for others, which is essential when examining a complex system like CCRB where multiple factors may influence our variable of interest. The model’s estimated coefficients will directly answer our research question by quantifying how much longer(or shorter) cases take to resolve based on each predictor. 
+
+### 1.2 Literature Summary
+
+|   Mrozla, Huynh, and Archbold(2022) analyzed misconduct allegations over 12 years and found that single officer interactions were significantly more likely to result in sustained complaints, while internal complaints filed by supervisors were sustained at higher rates than citizens filed external complaints. The study also documented that external complaints took longer to file, suggesting potential delays in the complaint review process based on complaint source. Hadley(2022) analyzed NYPD disciplinary outcomes, finding that NYPD routinely downcharged complaints, imposing penalties less severe than CCRB recommendations. After controlling for misconduct type and officer characteristics, black and Hispanic officers were less likely to receive leniency than white officers. Overall, few officers faced significant consequences regardless of race, with most receiving minimal discipline. These patterns suggest that both officer demographic and organizational practices influence complaint processing and outcomes. Headley et al. (2017) found Black and Hispanic complainants in Chicago were significantly less likely to have misconduct allegations sustained compared to white complainants. Black complainants were 4.7 times more likely to receive a ‘not sustained’ outcome. This directly informs our research by demonstrating racial inequalities in complaint outcomes, suggesting that complainant demographics are critical predictors of how a case is processed and resolved. 
+
+### 1.3 Benefactors 
+
+|   The primary benefactors of this linear model are policy makers and CCRB administrators who need evidence-based insights to identify restrictions in the complaint review process. By quantifying which factors predict longer processing times, administrations can allocate resources more effectively and implement targeted interventions to reduce delays. 
+
+
+```{r,  include = FALSE}
+# Load required packages
+library(dplyr)
+library(ggplot2)
+library(patchwork)
+library(knitr)
+
+allegations <- read.csv("allegations_202007271729.csv")
+
+# Clean and prepare data 
+
+allegations_clean <- subset(as.data.frame(allegations), 
+              select = c(year_received, month_received,
+         year_closed, month_closed, rank_now, rank_incident, mos_ethnicity, 
+         mos_gender, mos_age_incident, 
+         complainant_gender, complainant_ethnicity, complainant_age_incident, 
+         fado_type))
+
+# remove any rows containing a missing value
+allegations_clean <- allegations_clean[complete.cases(allegations_clean),]
+
+# Filter data to only black complainants
+
+allegations_clean2 <- subset(allegations_clean, complainant_ethnicity == "Black")
+
+#approximate the response variable of case process time in terms of months
+allegations_clean2 <- allegations_clean2 %>% mutate(
+  case_process_time = (year_closed - year_received) * 12 +
+      abs(month_closed - month_received))
+
+#Summarize categorical and numerical predictors as well as the response into tables using kable
+```
+## 2 Data Description
+
+|   The dataset was found from ProPublica’s “Civilian Complaints Against New York City Police Officers” database, which compiles records from CCRB. CCRB collects this data to ensure transparency in police misconduct investigations in New York city. The data was originally gathered through the official complaint intake process, officer interviews, witness statements, and internal NYPD disciplinary records. 
+
+### 2.1 Statistical Summary of Response Variable
+
+```{r}
+response_summary <- allegations_clean2 %>%
+  summarise(
+    Variable = "case_process_time",
+    N = n(),
+    Mean = mean(case_process_time, na.rm = TRUE),
+    Median = median(case_process_time, na.rm = TRUE),
+    SD = sd(case_process_time, na.rm = TRUE),
+    Min = min(case_process_time, na.rm = TRUE),
+    Max = max(case_process_time, na.rm = TRUE),
+    Q1 = quantile(case_process_time, 0.25, na.rm = TRUE),
+    Q3 = quantile(case_process_time, 0.75, na.rm = TRUE),
+    IQR = IQR(case_process_time, na.rm = TRUE),
+    Missing = sum(is.na(case_process_time))
+  )
+
+kable(response_summary, 
+      caption = "Statistical Summary of Case Processing Time (months)",
+      digits = 2)
+
+```
+Our response variable, case_processing_time, measures the duration in months between when a complaint is received by the CCRB and when the case is officially closed. This transformation is necessary because the original dataset provides only month and year values for case receipt and closure, not exact dates. By converting to a continuous measure in months, we create a numeric response variable suitable for linear regression that captures variation in processing duration. Our response meets the requirements since it is reasonably continuous. In addition we can reasonably assume independence of observations since each row represents a distinct allegation with its own processing timeline, and there is no dependence structure between complaints filed by different individuals at different times. Furthermore, preliminary examination of the variable’s distribution shows that while it is right skewed, the majority of cases fall within a reasonable range, and extreme outliers represent less than 2 percent of observations.
+
+### 2.2 Numerical Summary of Predictors
+
+```{r}
+predictor_summary <- data.frame(
+  Variable = c("year_received", "mos_age_incident", "complainant_age_incident",
+               "rank_now", "rank_incident", "mos_ethnicity", "mos_gender", 
+               "complainant_gender", "fado_type"),
+  
+  Type = c("Numerical", "Numerical", "Numerical",
+           "Categorical", "Categorical", "Categorical", "Categorical",
+           "Categorical", "Categorical"),
+  
+  Mean_or_Categories = c(
+    round(mean(allegations_clean2$year_received), 2),
+    round(mean(allegations_clean2$mos_age_incident), 2),
+    round(mean(allegations_clean2$complainant_age_incident), 2),
+    length(unique(allegations_clean2$rank_now)),
+    length(unique(allegations_clean2$rank_incident)),
+    length(unique(allegations_clean2$mos_ethnicity)),
+    length(unique(allegations_clean2$mos_gender)),
+    length(unique(allegations_clean2$complainant_gender)),
+    length(unique(allegations_clean2$fado_type))
+  ),
+  
+  SD_or_Mode = c(
+    round(sd(allegations_clean2$year_received), 2),
+    round(sd(allegations_clean2$mos_age_incident), 2),
+    round(sd(allegations_clean2$complainant_age_incident), 2),
+    names(sort(table(allegations_clean2$rank_now), decreasing = TRUE)[1]),
+    names(sort(table(allegations_clean2$rank_incident), decreasing = TRUE)[1]),
+    names(sort(table(allegations_clean2$mos_ethnicity), decreasing = TRUE)[1]),
+    names(sort(table(allegations_clean2$mos_gender), decreasing = TRUE)[1]),
+    names(sort(table(allegations_clean2$complainant_gender), decreasing = TRUE)[1]),
+    names(sort(table(allegations_clean2$fado_type), decreasing = TRUE)[1])
+  ),
+  
+  Min_or_Mode_Pct = c(
+    round(min(allegations_clean2$year_received), 2),
+    round(min(allegations_clean2$mos_age_incident), 2),
+    round(min(allegations_clean2$complainant_age_incident), 2),
+    paste0(round(max(table(allegations_clean2$rank_now)) / nrow(allegations_clean2) * 100, 1), "%"),
+    paste0(round(max(table(allegations_clean2$rank_incident)) / nrow(allegations_clean2) * 100, 1), "%"),
+    paste0(round(max(table(allegations_clean2$mos_ethnicity)) / nrow(allegations_clean2) * 100, 1), "%"),
+    paste0(round(max(table(allegations_clean2$mos_gender)) / nrow(allegations_clean2) * 100, 1), "%"),
+    paste0(round(max(table(allegations_clean2$complainant_gender)) / nrow(allegations_clean2) * 100, 1), "%"),
+    paste0(round(max(table(allegations_clean2$fado_type)) / nrow(allegations_clean2) * 100, 1), "%")
+  ),
+  
+  Max = c(
+    round(max(allegations_clean2$year_received), 2),
+    round(max(allegations_clean2$mos_age_incident), 2),
+    round(max(allegations_clean2$complainant_age_incident), 2),
+    NA, NA, NA, NA, NA, NA
+  ),
+  
+  Notes = c(
+    "Recent years more common",
+    "Slight right skew",
+    "Slight right skew",
+    "Concentration in lower ranks",
+    "Concentration in lower ranks",
+    "White most common",
+    "Male dominated",
+    "Relatively balanced",
+    "Force & Abuse most common"
+  )
+)
+kable(predictor_summary, 
+      caption = "Summary of All Predictor Variables",
+      col.names = c("Variable", "Type", "Mean/N Cats", 
+                    "SD/Mode", "Min/Mode%", "Max", "Notes"),
+      align = c('l', 'l', 'c', 'c', 'c', 'c', 'l'))
+```
+Based on Table 2, both rank_now and rank_incident show concentration in lower ranks, with police officer being the most common category. Also, mos_gender is heavily skewed toward males, while officer ethnicity shows white officers as the largest group. The fado_type variable shows Force and Abuse of Authority complaints dominate. We have no missing values after data cleaning. 
+
+### 2.3 Justification for use of interaction
+
+|   The interaction between complainant age and type is included based on evidence from our literature review. It allows us to examine whether the relationship between complainant age and case processing time varies across different types of misconduct allegations.
+
+## 3 Ethics Discussion
+
+|   The dataset used in this project, which documents Black civilian complaints against NYPD officers, can be considered trustworthy. The data originates from the Civilian Complaint Review Board (CCRB), an independent New York City agency that investigates and publicly releases information about police misconduct. Because it is produced and verified by an official group, the dataset meets the ethical standards of authenticity, transparency, and reliability discussed in class. It contains clearly defined variables such as officer rank, ethnicity, and case closure year, which are systematically documented. The dataset is also collected rather than simulated. These characteristics strengthen its overall credibility and usefulness for social research, especially in studies concerning justice and accountability. Despite its trustworthiness, the dataset raises some concerns regarding privacy, consent, and data ownership. Unlike typical anonymized public datasets, these records include identifiable details such as officer names and shield numbers. This was not an oversight but a deliberate choice which made police disciplinary records publicly accessible. While the release itself is lawful and transparent, researchers must remain conscious of the ethical risks associated with identifiable information. In accordance with the privacy and protection of persons principles emphasized in Module 3, the data must be used in ways that minimize harm, avoiding any attempt to single out individuals or sensationalize misconduct cases. Instead, the focus should remain on uncovering structural or institutional patterns, in case the case processing times. Finally, the ownership principle requires respecting the original intent of data publication. The CCRB and ProPublica maintain moral authority over the data, and researchers using it must act within that ethical framework. This project aligns with those intentions by analyzing trends related to fairness and efficiency rather than personal blame. In doing so, it promotes responsible, socially engaged data science that reflects the module’s core ethical values which include integrity, justice, and accountability.
+
+```{r}
+#Build the linear regression model
+
+model1 <- lm(case_process_time ~ year_received + rank_now + rank_incident + 
+               mos_ethnicity + mos_gender + mos_age_incident + 
+         complainant_gender + complainant_age_incident + fado_type + 
+           complainant_age_incident:fado_type, data = allegations_clean2)
+
+# Extract coefficients as a data frame for summary table
+model_summary <- summary(model1)
+coef_table <- as.data.frame(model_summary$coefficients)
+
+# Create a kable
+kable(coef_table, 
+      caption = "Linear Regression Results for Case Processing Time",
+      digits = 3)
+
+```
+## 4 Preliminary Results
+
+|  	The table above displays the preliminary linear regression results, including estimates, standard errors, and p-values. The preliminary model reveals several patterns in case processing times. The negative coefficient for year_received suggests that more recent complaints are processed faster, reflecting administrative improvements over time. Higher-ranking officers, such as Chiefs and Inspectors, had significantly shorter processing times, which contrasts with Mrozla, Huynh, and Archbold (2022), who found that internal or senior-level complaints often faced longer procedures. Interestingly, cases involving officers identified as Asian, Black, Hispanic, or White were processed faster than those with unspecified ethnicity, contrary to Hadley (2022), who found racial disparities disadvantaged officers of color. As expected, use-of-force complaints took longer to resolve, consistent with their complexity and seriousness. Other demographic and interaction variables were not significant. Overall, while the preliminary model captures several meaningful relationships, the presence of unexpected coefficient directions means we will have to take a closer look at the model in the following part.
+
+```{r, fig.height=3, fig.width=6}
+# use plots to check the assumptions
+y_value <- resid(model1)
+x_value <- fitted(model1)
+
+par(mfrow=c(1,2))
+
+# plots the residual vs fitted plot
+plot(x = x_value, y = y_value, main="Residual vs Fitted", xlab="Fitted", 
+     ylab="Residuals")
+
+# use qqnorm() and qqline() with residuals to display QQ plot
+qqnorm(y_value)
+qqline(y_value)
+```
+
+
+```{r, fig.height=3, fig.width=8}
+# use this command to plot these in a single grid
+par(mfrow=c(1,3))
+
+# run plots for numerical predictors
+plot(x = allegations_clean2$mos_age_incident, y = y_value, main="Residual vs Cop Age at Incident", xlab="Age", ylab="Residual")
+plot(x = allegations_clean2$complainant_age_incident, y = y_value, main="Residual vs Complainant Age at Incident", xlab="Age", ylab="Residual")
+plot(x = allegations_clean2$year_received, y = y_value, main="Residual vs Year Received", xlab="Year", ylab="Residual")
+```
+
+
+```{r, fig.height=6, fig.width=8}
+
+par(mfrow=c(2,3))
+
+# boxplots to be used for categorical predictors
+boxplot(y_value ~ allegations_clean2$rank_now , main="Residual vs Rank Now", xlab="Rank", ylab="Residuals")
+boxplot(y_value ~ allegations_clean2$rank_incident , main="Residual vs Rank at incident", xlab="Race", ylab="Residuals")
+boxplot(y_value ~ allegations_clean2$complainant_gender , main="Residuals vs Complainant Gender", xlab="Gender", ylab="Residuals")
+boxplot(y_value ~ allegations_clean2$mos_gender , main="Residuals vs Cop Gender", xlab="Gender", ylab="Residuals")
+boxplot(y_value ~ allegations_clean2$mos_ethnicity , main="Residuals vs Cop Ethnicity", xlab="Ethnicity", ylab="Residuals")
+boxplot(y_value ~ allegations_clean2$fado_type , main="Residuals vs Complaint Type", xlab="Complaint", ylab="Residuals")
+```
+
+### 4.1 Checking Assumptions
+|   To assess the assumptions of the linear regression model predicting case processing time for Black civilian complaints against NYPD officers, we examined residual plots and the QQ plot. When looking at the boxplots for categorical variables, there seems to be an issue with spread, there is a lot of variance to the right of the data especially when looking at the two rank plots. This can be an indicator of a constant variance assumption violation. Looking at the QQ plot, there seems to be a normality violation as well as the data forms a j shape and does not follow the line towards the right tail. This could be an indicator of right-skewed data. The residuals versus fitted values plot suggests slight non-linearity; the points show mild curvature, indicating that the linearity assumption may not hold perfectly. The residuals also display unequal spread, with greater variance at higher fitted values, suggesting homoscedasticity  may be violated.
+
+## 5 Plan
+
+|   From the preliminary results, it seems that several factors, such as year_received, rank_incidentDeputy Inspector, and fado_typeForce, show significant relationships with case processing time. However, some variables have weak or insignificant effects, and the residual plots show that a few assumptions might not hold perfectly. To improve the final model, we plan to carefully reduce and adjust the predictors so the model becomes simpler and more reliable. To decide which predictors to keep, we will look at both statistical results and the real-world context. We’ll first remove variables with very high p-values that show little to no relationship with case processing time. Then, we will check if some predictors overlap or measure similar things, for example, rank_now and rank_incident might represent related ideas about officer status. We will also find a smaller but effective set of predictors. Even if some predictors are not statistically significant, we will keep year_received and mos_ethnicity because they are directly linked to our research question about how time and race influence complaint handling. We will check model assumptions every time we make a change. The residual and Q-Q plots show that the data may not fully meet the normality and equal variance assumptions. To fix this, we might apply a log or square root transformation to case_processing_time to reduce skewness and stabilize the variance. We will also check if grouping certain ranks or complaint types makes the model cleaner and easier to interpret. The project will follow a structured timeline. In Week 1, the focus will be on additional data cleaning and variable transformation. Week 2 will involve model comparison and selection using statistical criteria and theoretical reasoning. Week 3 will be devoted to validating assumptions and writing the results section. Finally, Weeks 4-6 will include creating figures, summarizing findings, and designing the poster and reflection for submission. The chart below visually summarizes this plan, showing clear weekly milestones leading to the November 28 deadline.
+
+```{r, fig.height=4, fig.width=11}
+project_start <- as.Date("2025-10-13")   # Mon of Week 1
+gantt <- data.frame(
+  task  = c("Data cleaning & EDA",
+            "Preliminary model & proposal draft",
+            "Proposal refinement & submission (Part 1 due Oct 26)",
+            "Model refinement & assumption checks",
+            "Poster analysis & visualization",
+            "Poster writing & reflection (Parts 2–3 due Nov 28)"),
+  start = project_start + c(0, 7, 13, 20, 27, 34),
+  end   = project_start + c(6, 13, 20, 27, 34, 46),
+  phase = c("Week 1","Week 2","Week 3","Week 4","Week 5","Week 6")
+)
+gantt$task <- factor(gantt$task, levels = rev(gantt$task))
+week_breaks  <- seq(project_start, by = "1 week", length.out = 6)
+week_labels  <- c("Week 1\nOct 13", "Week 2\nOct 20", "Week 3\nOct 27",
+                  "Week 4\nNov 03", "Week 5\nNov 10", "Week 6\nNov 17")
+p <- ggplot(gantt, aes(y = task, x = start, xend = end, color = phase)) +
+  geom_segment(aes(yend = task), linewidth = 10, lineend = "round") +
+  scale_x_date(breaks = week_breaks, labels = week_labels, expand = c(0.01, 0.01)) +
+  labs(title = "STA302 Final Project Timeline (Oct–Nov 2025)",
+       x = NULL, y = NULL, color = NULL) +
+  theme_minimal(base_size = 14) +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.y = element_text(size = 12, hjust = 1, margin = margin(r = 15)),
+    axis.text.x = element_text(size = 11),
+    plot.title  = element_text(face = "bold", size = 16, hjust = 0.5),
+    legend.position = "right",
+    plot.margin = margin(10, 40, 10, 20)
+  )
+
+print(p)
+ggsave("sta302_gantt_week1to6.png", p, width = 12, height = 5, dpi = 300)
+```
+
+## 6 Contributions
+All group members worked together to develop the research question and conduct background research.
+
+*Anisa*: Wrote the Introduction and Data Description sections, summarizing the dataset and its relevance. 
+*Lidya*: Worked on the Preliminary Results and R code, including data cleaning, model building, and diagnostic checks.
+
+*Hannah*: Wrote the Ethics Discussion and Plan sections, outlining ethical considerations, the project timeline, and next steps.
+
+Everyone contributed equally to refining the research question, reviewing results, and editing the final proposal.
+
+
+\newpage
+## 7 Bibliography
+
+Hadley, M. (2022). Behind the blue wall of silence: Racial disparities in NYPD discipline. Columbia 
+
+|   Human Rights Law Review, 53(2), 663-710.
+
+Headley, A. M., D’Alessio, S. J., & Stolzenberg, L. (2020). The Effect of a Complainant’s Race and 
+
+|   Ethnicity on Dispositional Outcome in Police Misconduct Cases in Chicago. Race and Justice, 
+
+|   10(1), 43–61. https://doi.org/10.1177/2153368717726829 
+
+Mrozla, T., Huynh, C., & Archbold, C. A. (2022). What took you so long? An examination of reporting 
+
+|   time and police misconduct complaint dispositions. Deviant Behavior, 43(7), 852-866. 
+
+|   https://doi.org/10.1080/01639625.2021.1919497
+
+ProPublica. (2023). Civilian Complaints Against New York City Police Officers [Data set]. 
+
+|   ProPublica Data Store. https://www.propublica.org/datastore/dataset/civilian-complaints-
+
+|   against-new-york-city-police-officers

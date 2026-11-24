@@ -1,0 +1,373 @@
+---
+title: "STA302H1 Fall 2025 Final Project Part 2: Poster Presentation"
+author: "Lidya Yared, Hannah Zihan Wang, Anisa Hosseinpour Khoshghalb"
+date: "2025-11-28"
+output: pdf_document
+keep_md: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+<div style="text-align: center;">
+
+## **Research Question: Which demographic and time-determined factors predict longer case processing times for Black civilian complaints against NYPD officers?**
+
+</div>
+
+
+
+```{r}
+# Load required packages
+library(dplyr)
+library(ggplot2)
+library(patchwork)
+library(knitr)
+library(MASS)
+
+
+allegations <- read.csv("allegations_202007271729.csv")
+
+# Clean and prepare data 
+
+allegations_clean <- subset(as.data.frame(allegations), 
+              select = c(year_received, month_received,
+         year_closed, month_closed, rank_now, rank_incident, mos_ethnicity, 
+         mos_gender, mos_age_incident, 
+         complainant_gender, complainant_ethnicity, complainant_age_incident, 
+         fado_type))
+
+# remove any rows containing a missing value
+allegations_clean <- allegations_clean[complete.cases(allegations_clean),]
+
+# Filter data to only black complainants
+
+allegations_clean2 <- subset(allegations_clean, complainant_ethnicity == "Black")
+
+#approximate the response variable of case process time in terms of months
+allegations_clean2 <- allegations_clean2 %>% mutate(
+  case_process_time = (year_closed - year_received) * 12 +
+      abs(month_closed - month_received))
+```
+
+## Preliminary Model
+
+
+```{r}
+#Build the linear regression model
+model1 <- lm(case_process_time ~ year_received + rank_now + rank_incident + 
+               mos_ethnicity + mos_gender + mos_age_incident + 
+         complainant_gender + complainant_age_incident + fado_type + 
+           complainant_age_incident:fado_type, data = allegations_clean2)
+
+summary(model1)
+
+```
+
+
+
+```{r, fig.height=3, fig.width=6}
+# use plots to check the assumptions
+y_value <- resid(model1)
+x_value <- fitted(model1)
+
+par(mfrow=c(1,2))
+
+# plots the residual vs fitted plot
+plot(x = x_value, y = y_value, main="Residual vs Fitted", xlab="Fitted", 
+     ylab="Residuals")
+
+# use qqnorm() and qqline() with residuals to display QQ plot
+qqnorm(y_value)
+qqline(y_value)
+```
+##Models for quantitative variables
+
+```{r, fig.height=3, fig.width=8}
+# use this command to plot these in a single grid
+par(mfrow=c(1,3))
+
+# run plots for numerical predictors
+plot(x = allegations_clean2$mos_age_incident, y = y_value, main="Residual vs Cop Age at Incident", xlab="Age", ylab="Residual")
+plot(x = allegations_clean2$complainant_age_incident, y = y_value, main="Residual vs Complainant Age at Incident", xlab="Age", ylab="Residual")
+plot(x = allegations_clean2$year_received, y = y_value, main="Residual vs Year Received", xlab="Year", ylab="Residual")
+```
+##Model for Categorical variables
+
+```{r, fig.height=6, fig.width=8}
+
+par(mfrow=c(2,3))
+
+# boxplots to be used for categorical predictors
+boxplot(y_value ~ allegations_clean2$rank_now , main="Residual vs Rank Now", xlab="Rank", ylab="Residuals")
+boxplot(y_value ~ allegations_clean2$rank_incident , main="Residual vs Rank at incident", xlab="Race", ylab="Residuals")
+boxplot(y_value ~ allegations_clean2$complainant_gender , main="Residuals vs Complainant Gender", xlab="Gender", ylab="Residuals")
+boxplot(y_value ~ allegations_clean2$mos_gender , main="Residuals vs Cop Gender", xlab="Gender", ylab="Residuals")
+boxplot(y_value ~ allegations_clean2$mos_ethnicity , main="Residuals vs Cop Ethnicity", xlab="Ethnicity", ylab="Residuals")
+boxplot(y_value ~ allegations_clean2$fado_type , main="Residuals vs Complaint Type", xlab="Complaint", ylab="Residuals")
+```
+
+
+##Fixing Model Assumption violations
+
+```{r}
+# apply boxCox() on model1
+
+#boxCox(model1)
+
+#powerTransform(model1)
+
+
+bcCPT <- allegations_clean2$case_process_time^0.4
+
+
+# do a log transformation to try and fix right skew
+logCPT <- log(allegations_clean2$case_process_time)
+
+#Check sqrt tranformation just in case
+sqrtCPT <- sqrt(allegations_clean2$case_process_time)
+
+```
+
+```{r, fig.height=3, fig.width=6}
+#recheck model with log
+modellog <- lm(logCPT ~ year_received + rank_now + rank_incident + 
+               mos_ethnicity + mos_gender + mos_age_incident + 
+         complainant_gender + complainant_age_incident + fado_type + 
+           complainant_age_incident:fado_type, data = allegations_clean2)
+
+summary(modellog)
+#Re-Check plots
+y_value1 <- resid(modellog)
+x_value1 <- fitted(modellog)
+
+par(mfrow=c(1,2))
+
+# plots the residual vs fitted plot
+plot(x = x_value1, y = y_value1, main="Residual vs Fitted", xlab="Fitted", 
+     ylab="Residuals")
+
+# use qqnorm() and qqline() with residuals to display QQ plot
+qqnorm(y_value1)
+qqline(y_value1)
+```
+##Recheck each plot
+```{r, fig.height=3, fig.width=8}
+# use this command to plot these in a single grid
+par(mfrow=c(1,3))
+
+# run plots for numerical predictors
+plot(x = allegations_clean2$mos_age_incident, y = y_value1, main="Residual vs Cop Age at Incident", xlab="Age", ylab="Residual")
+plot(x = allegations_clean2$complainant_age_incident, y = y_value1, main="Residual vs Complainant Age at Incident", xlab="Age", ylab="Residual")
+plot(x = allegations_clean2$year_received, y = y_value1, main="Residual vs Year Received", xlab="Year", ylab="Residual")
+```
+```{r, fig.height=6, fig.width=8}
+
+par(mfrow=c(2,3))
+
+# boxplots to be used for categorical predictors
+boxplot(y_value1 ~ allegations_clean2$rank_now , main="Residual vs Rank Now", xlab="Rank", ylab="Residuals")
+boxplot(y_value1 ~ allegations_clean2$rank_incident , main="Residual vs Rank at incident", xlab="Race", ylab="Residuals")
+boxplot(y_value1 ~ allegations_clean2$complainant_gender , main="Residuals vs Complainant Gender", xlab="Gender", ylab="Residuals")
+boxplot(y_value1 ~ allegations_clean2$mos_gender , main="Residuals vs Cop Gender", xlab="Gender", ylab="Residuals")
+boxplot(y_value1 ~ allegations_clean2$mos_ethnicity , main="Residuals vs Cop Ethnicity", xlab="Ethnicity", ylab="Residuals")
+boxplot(y_value1 ~ allegations_clean2$fado_type , main="Residuals vs Complaint Type", xlab="Complaint", ylab="Residuals")
+```
+
+```{r, fig.height=3, fig.width=6}
+#recheck model with log
+modelbc <- lm(bcCPT ~ year_received + rank_now + rank_incident + 
+               mos_ethnicity + mos_gender + mos_age_incident + 
+         complainant_gender + complainant_age_incident + fado_type + 
+          complainant_age_incident:fado_type, data = allegations_clean2)
+
+#Re-Check plots
+y_value2 <- resid(modelbc)
+x_value2 <- fitted(modelbc)
+
+par(mfrow=c(1,2))
+
+# plots the residual vs fitted plot
+plot(x = x_value2, y = y_value2, main="Residual vs Fitted", xlab="Fitted", 
+     ylab="Residuals")
+
+# use qqnorm() and qqline() with residuals to display QQ plot
+qqnorm(y_value2)
+qqline(y_value2)
+```
+```{r, fig.height=3, fig.width=8}
+# use this command to plot these in a single grid
+par(mfrow=c(1,3))
+
+# run plots for numerical predictors
+plot(x = allegations_clean2$mos_age_incident, y = y_value2, main="Residual vs Cop Age at Incident", xlab="Age", ylab="Residual")
+plot(x = allegations_clean2$complainant_age_incident, y = y_value2, main="Residual vs Complainant Age at Incident", xlab="Age", ylab="Residual")
+plot(x = allegations_clean2$year_received, y = y_value2, main="Residual vs Year Received", xlab="Year", ylab="Residual")
+```
+```{r, fig.height=6, fig.width=8}
+
+par(mfrow=c(2,3))
+
+# boxplots to be used for categorical predictors
+boxplot(y_value2 ~ allegations_clean2$rank_now , main="Residual vs Rank Now", xlab="Rank", ylab="Residuals")
+boxplot(y_value2 ~ allegations_clean2$rank_incident , main="Residual vs Rank at incident", xlab="Race", ylab="Residuals")
+boxplot(y_value2 ~ allegations_clean2$complainant_gender , main="Residuals vs Complainant Gender", xlab="Gender", ylab="Residuals")
+boxplot(y_value2 ~ allegations_clean2$mos_gender , main="Residuals vs Cop Gender", xlab="Gender", ylab="Residuals")
+boxplot(y_value2 ~ allegations_clean2$mos_ethnicity , main="Residuals vs Cop Ethnicity", xlab="Ethnicity", ylab="Residuals")
+boxplot(y_value2 ~ allegations_clean2$fado_type , main="Residuals vs Complaint Type", xlab="Complaint", ylab="Residuals")
+```
+```{r, fig.height=3, fig.width=6}
+#recheck model with log
+modelsqrt <- lm(sqrtCPT ~ year_received + rank_now + rank_incident + 
+               mos_ethnicity + mos_gender + mos_age_incident + 
+         complainant_gender + complainant_age_incident + fado_type + 
+           complainant_age_incident:fado_type, data = allegations_clean2)
+
+#Re-Check plots
+y_value3 <- resid(modelsqrt)
+x_value3 <- fitted(modelsqrt)
+
+par(mfrow=c(1,2))
+
+# plots the residual vs fitted plot
+plot(x = x_value3, y = y_value3, main="Residual vs Fitted", xlab="Fitted", 
+     ylab="Residuals")
+
+# use qqnorm() and qqline() with residuals to display QQ plot
+qqnorm(y_value3)
+qqline(y_value3)
+```
+```{r, fig.height=3, fig.width=8}
+# use this command to plot these in a single grid
+par(mfrow=c(1,3))
+
+# run plots for numerical predictors
+plot(x = allegations_clean2$mos_age_incident, y = y_value3, main="Residual vs Cop Age at Incident", xlab="Age", ylab="Residual")
+plot(x = allegations_clean2$complainant_age_incident, y = y_value3, main="Residual vs Complainant Age at Incident", xlab="Age", ylab="Residual")
+plot(x = allegations_clean2$year_received, y = y_value3, main="Residual vs Year Received", xlab="Year", ylab="Residual")
+```
+
+```{r, fig.height=6, fig.width=8}
+
+par(mfrow=c(2,3))
+
+# boxplots to be used for categorical predictors
+boxplot(y_value3 ~ allegations_clean2$rank_now , main="Residual vs Rank Now", xlab="Rank", ylab="Residuals")
+boxplot(y_value3 ~ allegations_clean2$rank_incident , main="Residual vs Rank at incident", xlab="Race", ylab="Residuals")
+boxplot(y_value3 ~ allegations_clean2$complainant_gender , main="Residuals vs Complainant Gender", xlab="Gender", ylab="Residuals")
+boxplot(y_value3 ~ allegations_clean2$mos_gender , main="Residuals vs Cop Gender", xlab="Gender", ylab="Residuals")
+boxplot(y_value3 ~ allegations_clean2$mos_ethnicity , main="Residuals vs Cop Ethnicity", xlab="Ethnicity", ylab="Residuals")
+boxplot(y_value3 ~ allegations_clean2$fado_type , main="Residuals vs Complaint Type", xlab="Complaint", ylab="Residuals")
+```
+
+##Filter out predictors
+```{r}
+#Use ANOVA to determine if there are any statistically insignificant predictors
+anova(modellog)
+
+#Use confint to determine relevance of nueric predictors
+modelCI_1 <- confint(modellog, "year_received")
+modelCI_6 <- confint(modellog, "mos_age_incident")
+modelCI_8 <- confint(modellog, "complainant_age_incident")
+```
+
+##Now that we determined that complainant_age_incident and the interaction term may not be significant, lets test to make sure the model is improved or otherwise unchanged by the removal.
+```{r}
+
+#New reduced model
+modelred <- lm(logCPT ~ year_received + rank_now + rank_incident + 
+               mos_ethnicity + mos_gender + mos_age_incident + 
+         complainant_gender + fado_type, 
+         data = allegations_clean2)
+summary(modelred)
+
+#Check if removal was significant using ANOVA
+anova(modelred, modellog)
+```
+##Run full diagnostics for modelred
+```{r, fig.height=3, fig.width=6}
+#Re-Check plots
+y_value4 <- resid(modelred)
+x_value4 <- fitted(modelred)
+
+par(mfrow=c(1,2))
+
+# plots the residual vs fitted plot
+plot(x = x_value4, y = y_value4, main="Residual vs Fitted", xlab="Fitted", 
+     ylab="Residuals")
+
+# use qqnorm() and qqline() with residuals to display QQ plot
+qqnorm(y_value4)
+qqline(y_value4)
+```
+```{r, fig.height=8, fig.width=8}
+# use this command to plot these in a single grid
+par(mfrow=c(3,3))
+
+# run plots for numerical predictors
+plot(x = allegations_clean2$mos_age_incident, y = y_value4, main="Residual vs Cop Age at Incident", xlab="Age", ylab="Residual")
+plot(x = allegations_clean2$complainant_age_incident, y = y_value4, main="Residual vs Complainant Age at Incident", xlab="Age", ylab="Residual")
+plot(x = allegations_clean2$year_received, y = y_value4, main="Residual vs Year Received", xlab="Year", ylab="Residual")
+
+# boxplots to be used for categorical predictors
+boxplot(y_value4 ~ allegations_clean2$rank_now , main="Residual vs Rank Now", xlab="Rank", ylab="Residuals")
+boxplot(y_value4 ~ allegations_clean2$rank_incident , main="Residual vs Rank at incident", xlab="Race", ylab="Residuals")
+boxplot(y_value4 ~ allegations_clean2$complainant_gender , main="Residuals vs Complainant Gender", xlab="Gender", ylab="Residuals")
+boxplot(y_value4 ~ allegations_clean2$mos_gender , main="Residuals vs Cop Gender", xlab="Gender", ylab="Residuals")
+boxplot(y_value4 ~ allegations_clean2$mos_ethnicity , main="Residuals vs Cop Ethnicity", xlab="Ethnicity", ylab="Residuals")
+boxplot(y_value4 ~ allegations_clean2$fado_type , main="Residuals vs Complaint Type", xlab="Complaint", ylab="Residuals")
+```
+
+
+## Checking for multicollinearity
+```{r}
+
+#Checking for multicollinearity
+#install.packages("car")
+#library(car)
+
+#vif(modelred, type = 'predictor')
+
+```
+
+
+## Identify and remove influential/problematic observations
+
+```{r}
+# standardized residuals
+#rstandard(modelred)
+```
+
+```{r}
+# which observations are leverage points?
+#hatvalues(modelred)
+```
+
+```{r}
+# which observations are influential by cook's distance?
+#cooks.distance(modelred)
+
+```
+
+```{r}
+# which observations are influential by dffits?
+#dffits(modelred)
+```
+
+```{r}
+# which observations are influential by dfbetas?
+#dfbetas(modelred)
+```
+
+##Table for my poster
+```{r}
+model_summary <- summary(modelred)
+coef_table <- as.data.frame(model_summary$coefficients)
+
+# Create a kable
+kable(coef_table, 
+      caption = "Linear Regression Results for Case Processing Time",
+      digits = 4)
+```
